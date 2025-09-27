@@ -4,14 +4,10 @@ import snowflake.connector
 import plotly.express as px
 from groq import Groq
 import json
-import tempfile
-from weasyprint import HTML
 from streamlit_plotly_events import plotly_events
-import os
 
 # --- Initialization and Secrets Setup ---
-# WARNING: HARDCODED PLACEHOLDER SECRETS FOR DEMO ONLY! 
-# In production, use st.secrets for secure credential management.
+# WARNING: Use st.secrets in production
 secrets = {
     "groq": {"api_key": "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"},
     "snowflake": {
@@ -19,9 +15,9 @@ secrets = {
         "password": "Yashwanth_2005",
         "account": "ap33012.ap-southeast-1",
         "warehouse": "COMPUTE_WH",
-        "database": "FACT_SALES_DB",   # ✅ corrected
-        "schema": "PUBLIC",            # ✅ corrected
-        "role": "ACCOUNTADMIN"         # ✅ corrected
+        "database": "FACT_SALES_DB",
+        "schema": "PUBLIC",
+        "role": "ACCOUNTADMIN"
     }
 }
 
@@ -40,16 +36,13 @@ st.subheader("Generate interactive data dashboards instantly using natural langu
 def get_snowflake_connection():
     try:
         conn = snowflake.connector.connect(**secrets["snowflake"])
-        cur = conn.cursor()
-        # ✅ enforce context
-        cur.execute(f"USE WAREHOUSE {secrets['snowflake']['warehouse']}")
-        cur.execute(f"USE DATABASE {secrets['snowflake']['database']}")
-        cur.execute(f"USE SCHEMA {secrets['snowflake']['schema']}")
-        cur.execute(f"USE ROLE {secrets['snowflake']['role']}")
-        st.write("✅ Connected to Snowflake with context:",
-                 secrets['snowflake']['database'],
-                 secrets['snowflake']['schema'],
-                 secrets['snowflake']['role'])
+        # Set context
+        with conn.cursor() as cur:
+            cur.execute(f"USE WAREHOUSE {secrets['snowflake']['warehouse']}")
+            cur.execute(f"USE DATABASE {secrets['snowflake']['database']}")
+            cur.execute(f"USE SCHEMA {secrets['snowflake']['schema']}")
+            cur.execute(f"USE ROLE {secrets['snowflake']['role']}")
+        st.success(f"✅ Connected to Snowflake: {secrets['snowflake']['database']}.{secrets['snowflake']['schema']} ({secrets['snowflake']['role']})")
         return conn
     except Exception as e:
         st.error(f"❌ Failed to connect to Snowflake. Error: {e}")
@@ -64,36 +57,28 @@ except Exception as e:
 
 # ---------------- Dashboard Functions ----------------
 def get_dashboard_spec(prompt):
-    """
-    Call Groq API to get dashboard JSON specification.
-    """
     system_msg = f"""
     You are a world-class data analysis assistant specializing in generating concise, executable SQL queries for Snowflake.
     The main sales table is FACT_SALES_DB.PUBLIC.FACT_SALES_DATABASE.
-
-    Return ONLY the JSON object. Do not include any text, markdown, or commentary outside the JSON.
-
-    The JSON structure MUST be:
+    Return ONLY the JSON object in this format:
     {{
       "charts": [
         {{
           "id": "chart1", 
           "type": "bar", 
-          "title": "A descriptive chart title", 
+          "title": "Descriptive title", 
           "sql": "SELECT column_x, SUM(column_y) FROM FACT_SALES_DB.PUBLIC.FACT_SALES_DATABASE GROUP BY column_x ORDER BY 2 DESC LIMIT 50000" 
         }}
       ]
     }}
-
     Rules:
-    1. Use only 'SELECT' queries.
-    2. Always use fully qualified table name FACT_SALES_DB.PUBLIC.FACT_SALES_DATABASE.
-    3. Always limit results using 'LIMIT 50000'.
-    4. Ensure column names in the SELECT clause are appropriate for the chart type.
+    1. Use only SELECT queries.
+    2. Fully qualified table name: FACT_SALES_DB.PUBLIC.FACT_SALES_DATABASE.
+    3. Limit results using LIMIT 50000.
     """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",   # ✅ supported model
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
@@ -106,13 +91,14 @@ def get_dashboard_spec(prompt):
         st.error(f"Groq API Error: {e}")
         return None
 
-def run_sql(cur, sql):
+def run_sql(conn, sql):
     try:
-        st.info(f"Executing SQL: `{sql}`")
-        cur.execute(sql)
-        df = pd.DataFrame(cur.fetchall(), columns=[c[0] for c in cur.description])
-        df.columns = [col.upper() for col in df.columns] 
-        return df
+        with conn.cursor() as cur:
+            st.info(f"Executing SQL: `{sql}`")
+            cur.execute(sql)
+            df = pd.DataFrame(cur.fetchall(), columns=[c[0] for c in cur.description])
+            df.columns = [col.upper() for col in df.columns]
+            return df
     except Exception as e:
         st.error(f"SQL Execution Error: {e}")
         return pd.DataFrame()
@@ -137,7 +123,6 @@ def plot_chart(df, chart_type, title):
     if df.empty:
         st.warning(f"No data available for {title}")
         return None
-    
     if len(df.columns) < 2:
         st.warning(f"Chart '{title}' requires at least two columns.")
         st.dataframe(df)
@@ -157,7 +142,7 @@ def plot_chart(df, chart_type, title):
             return None
         
         fig.update_layout(
-            clickmode='event+select', 
+            clickmode='event+select',
             margin=dict(l=20, r=20, t=50, b=20),
             paper_bgcolor="#1e1e1e",
             plot_bgcolor="#1e1e1e",
@@ -189,55 +174,51 @@ with st.sidebar:
 # ---------------- Main Interaction ----------------
 user_prompt = st.chat_input("Ask for a dashboard, e.g., 'Show me quarterly revenue and top 5 products by sales last year.'")
 
-if st.button("Generate Dashboard"):
-    if user_prompt:
-        st.session_state.last_prompt = user_prompt
-    elif "last_prompt" in st.session_state:
-        user_prompt = st.session_state.last_prompt
-        
+if st.button("Generate Dashboard") and user_prompt:
+    st.session_state.last_prompt = user_prompt
+elif "last_prompt" in st.session_state:
+    user_prompt = st.session_state.last_prompt
+
 if user_prompt:
     st.session_state.last_prompt = user_prompt
-    with st.container(border=True):
-        st.markdown(f"**Your Query:** *{user_prompt}*")
-        with st.spinner("🤖 AI Analyst generating dashboard..."):
-            spec = get_dashboard_spec(user_prompt)
+    st.markdown(f"**Your Query:** *{user_prompt}*")
+    with st.spinner("🤖 AI Analyst generating dashboard..."):
+        spec = get_dashboard_spec(user_prompt)
 
-            if spec and "charts" in spec:
-                st.session_state.chart_specs = spec["charts"]
-                st.session_state.chart_dataframes = {}
+        if spec and "charts" in spec:
+            st.session_state.chart_specs = spec["charts"]
+            st.session_state.chart_dataframes = {}
+            conn = get_snowflake_connection()
+            st.markdown("---")
+            st.markdown("#### Generated Charts")
+            chart_cols = st.columns(2)
 
-                conn = get_snowflake_connection()
-                cur = conn.cursor()
-                st.markdown("---")
-                st.markdown("#### Generated Charts")
-                chart_cols = st.columns(2)
+            for idx, chart in enumerate(st.session_state.chart_specs):
+                sql_query = chart["sql"]
+                if region_filter != "All":
+                    sql_query = safe_append_filter(sql_query, f"REGION = '{region_filter}'")
+                if product_filter:
+                    sql_query = safe_append_filter(sql_query, f"PRODUCT_NAME ILIKE '%{product_filter}%'")
                 
-                for idx, chart in enumerate(st.session_state.chart_specs):
-                    sql_query = chart["sql"]
-                    if region_filter != "All":
-                        sql_query = safe_append_filter(sql_query, f"REGION = '{region_filter}'")
-                    if product_filter:
-                        sql_query = safe_append_filter(sql_query, f"PRODUCT_NAME ILIKE '%{product_filter}%'")
-                    df = run_sql(cur, sql_query)
-                    st.session_state.chart_dataframes[chart["id"]] = df
+                df = run_sql(conn, sql_query)
+                st.session_state.chart_dataframes[chart["id"]] = df
 
-                    col = chart_cols[idx % 2]
-                    with col:
-                        fig = plot_chart(df, chart["type"], chart["title"])
-                        if fig:
-                            clicked_points = plotly_events(
-                                fig, 
-                                click_event=True,
-                                key=f"plotly_event_{chart['id']}",
-                                override_height=400
-                            )
-                            if clicked_points:
-                                clicked_x = clicked_points[0].get('x') 
-                                if clicked_x is not None:
-                                    st.session_state.clicked_value = str(clicked_x)
-                                    st.rerun()
-                cur.close()
-                conn.close()
-            else:
-                st.error("AI failed to generate a valid chart specification (JSON structure). Try a more specific query.")
+                col = chart_cols[idx % 2]
+                with col:
+                    fig = plot_chart(df, chart["type"], chart["title"])
+                    if fig:
+                        clicked_points = plotly_events(
+                            fig,
+                            click_event=True,
+                            key=f"plotly_event_{chart['id']}",
+                            override_height=400
+                        )
+                        if clicked_points:
+                            clicked_x = clicked_points[0].get('x')
+                            if clicked_x is not None:
+                                st.session_state.clicked_value = str(clicked_x)
+                                st.rerun()
 
+            conn.close()
+        else:
+            st.error("AI failed to generate a valid chart specification (JSON structure). Try a more specific query.")
