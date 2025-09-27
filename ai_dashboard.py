@@ -95,8 +95,8 @@ def get_dashboard_spec(prompt):
     
     try:
         response = client.chat.completions.create(
-            # Using the new, supported Mixtral instruct model
-            model="mixtral-8x7b-instruct", 
+            # Switching to a currently supported and stable model
+            model="llama3-8b-8192", 
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
@@ -357,7 +357,7 @@ if st.session_state.chart_dataframes:
         # Display the filtered charts below the main charts
         for idx, chart_id in enumerate(st.session_state.chart_dataframes.keys()):
             df = st.session_state.chart_dataframes[chart_id]
-            spec = next((c for c in st.session_state.chart_specs if c['id'] == chart_id), None)
+            spec = next((c for c in st.session_session.chart_specs if c['id'] == chart_id), None)
             
             if spec and not df.empty and df.shape[1] >= 2:
                 # Apply filter logic
@@ -390,4 +390,3 @@ if st.session_state.chart_dataframes:
                                 key=f"plotly_event_{chart_id}_rerender",
                                 override_height=400
                             )
-
