@@ -183,11 +183,11 @@ def plot_chart(df, chart_type, title):
 
 # Initialize session state for filtering and chart data
 if 'chart_specs' not in st.session_state:
-    st.session_session.chart_specs = []
-if 'chart_dataframes' not in st.session_session:
-    st.session_session.chart_dataframes = {}
-if 'clicked_value' not in st.session_session:
-    st.session_session.clicked_value = None
+    st.session_state.chart_specs = []
+if 'chart_dataframes' not in st.session_state:
+    st.session_state.chart_dataframes = {}
+if 'clicked_value' not in st.session_state:
+    st.session_state.clicked_value = None
 
 
 # ---------------- Sidebar for Filters and Options ----------------
@@ -205,7 +205,7 @@ with st.sidebar:
     st.markdown("#### Export Dashboard")
     
     # PDF Export Logic
-    if st.button("Download as PDF", disabled=not st.session_session.chart_specs):
+    if st.button("Download as PDF", disabled=not st.session_state.chart_specs):
         with st.spinner("Generating PDF... (Requires dependencies in packages.txt)"):
             html_tmp_path = None
             pdf_file_path = None
@@ -215,10 +215,10 @@ with st.sidebar:
                 html_content += "<style>body { font-family: sans-serif; margin: 50px; } .chart-container { page-break-inside: avoid; margin-bottom: 30px; }</style>"
                 html_content += "</head><body><h1>AI Dashboard Export</h1>"
                 
-                for chart_id, df in st.session_session.chart_dataframes.items():
+                for chart_id, df in st.session_state.chart_dataframes.items():
                     if not df.empty and df.shape[1] >= 2:
                         # Find the original chart spec to get type and title
-                        spec = next((c for c in st.session_session.chart_specs if c['id'] == chart_id), None)
+                        spec = next((c for c in st.session_state.chart_specs if c['id'] == chart_id), None)
                         if spec:
                             # Use the plotting function to get the figure (restoring dark background for consistency)
                             fig = plot_chart(df, spec["type"], spec["title"])
@@ -269,12 +269,12 @@ user_prompt = st.chat_input("Ask for a dashboard, e.g., 'Show me quarterly reven
 if st.button("Generate Dashboard"):
     # Use the content of the chat input if button is pressed
     if user_prompt:
-        st.session_session.last_prompt = user_prompt
-    elif "last_prompt" in st.session_session:
-        user_prompt = st.session_session.last_prompt
+        st.session_state.last_prompt = user_prompt
+    elif "last_prompt" in st.session_state:
+        user_prompt = st.session_state.last_prompt
         
 if user_prompt:
-    st.session_session.last_prompt = user_prompt
+    st.session_state.last_prompt = user_prompt
     
     with st.container(border=True):
         st.markdown(f"**Your Query:** *{user_prompt}*")
@@ -285,8 +285,8 @@ if user_prompt:
             spec = get_dashboard_spec(user_prompt)
 
             if spec and "charts" in spec:
-                st.session_session.chart_specs = spec["charts"]
-                st.session_session.chart_dataframes = {}
+                st.session_state.chart_specs = spec["charts"]
+                st.session_state.chart_dataframes = {}
 
                 conn = get_snowflake_connection()
                 cur = conn.cursor()
@@ -297,7 +297,7 @@ if user_prompt:
                 # Layout for Charts (2 columns)
                 chart_cols = st.columns(2)
                 
-                for idx, chart in enumerate(st.session_session.chart_specs):
+                for idx, chart in enumerate(st.session_state.chart_specs):
                     sql_query = chart["sql"]
 
                     # 2. Apply Filters
@@ -308,7 +308,7 @@ if user_prompt:
                         
                     # 3. Run SQL
                     df = run_sql(cur, sql_query)
-                    st.session_session.chart_dataframes[chart["id"]] = df
+                    st.session_state.chart_dataframes[chart["id"]] = df
 
                     # 4. Plot Chart
                     col = chart_cols[idx % 2]
@@ -327,7 +327,7 @@ if user_prompt:
                                 # Assume the first column (X-axis) is the filter dimension
                                 clicked_x = clicked_points[0].get('x') 
                                 if clicked_x is not None:
-                                    st.session_session.clicked_value = str(clicked_x)
+                                    st.session_state.clicked_value = str(clicked_x)
                                     st.rerun() # Rerun to apply cross-filter immediately
 
                 cur.close()
@@ -337,17 +337,17 @@ if user_prompt:
                 
 # ---------------- Cross-Filter and Display Results ----------------
 
-if st.session_session.chart_dataframes:
+if st.session_state.chart_dataframes:
     st.markdown("---")
     
     # Determine the cross-filter value
     filter_value = None
-    if st.session_session.clicked_value:
-        filter_value = st.session_session.clicked_value
+    if st.session_state.clicked_value:
+        filter_value = st.session_state.clicked_value
         st.subheader(f"Cross-Filter Active: Filtering by **`{filter_value}`**")
         st.markdown("*(Click on a new chart element or click the reset button to clear the filter.)*")
         if st.button("🔄 Reset Filter", key="reset_button_main"):
-            st.session_session.clicked_value = None
+            st.session_state.clicked_value = None
             st.rerun()
 
     if filter_value:
@@ -355,10 +355,10 @@ if st.session_session.chart_dataframes:
         chart_cols = st.columns(2)
         
         # Display the filtered charts below the main charts
-        for idx, chart_id in enumerate(st.session_session.chart_dataframes.keys()):
-            df = st.session_session.chart_dataframes[chart_id]
+        for idx, chart_id in enumerate(st.session_state.chart_dataframes.keys()):
+            df = st.session_state.chart_dataframes[chart_id]
             # CRITICAL FIX: The next line contained a typo (st.session_session.chart_specs). This has been corrected.
-            spec = next((c for c in st.session_session.chart_specs if c['id'] == chart_id), None)
+            spec = next((c for c in st.session_state.chart_specs if c['id'] == chart_id), None)
             
             if spec and not df.empty and df.shape[1] >= 2:
                 # Apply filter logic
@@ -376,9 +376,9 @@ if st.session_session.chart_dataframes:
         # This prevents chart duplication when the user clicks 'Generate Dashboard'
         if not user_prompt:
              chart_cols = st.columns(2)
-             for idx, chart_id in enumerate(st.session_session.chart_dataframes.keys()):
-                df = st.session_session.chart_dataframes[chart_id]
-                spec = next((c for c in st.session_session.chart_specs if c['id'] == chart_id), None)
+             for idx, chart_id in enumerate(st.session_state.chart_dataframes.keys()):
+                df = st.session_state.chart_dataframes[chart_id]
+                spec = next((c for c in st.session_state.chart_specs if c['id'] == chart_id), None)
                 if spec:
                     col = chart_cols[idx % 2]
                     with col:
