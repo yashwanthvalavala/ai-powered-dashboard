@@ -65,7 +65,7 @@ except Exception as e:
 # ---------------- Dashboard Functions ----------------
 def get_dashboard_spec(prompt):
     """
-    Call Mixtral via Groq API to get dashboard JSON specification.
+    Call Groq API to get dashboard JSON specification.
     """
     system_msg = f"""
     You are a world-class data analysis assistant specializing in generating concise, executable SQL queries for Snowflake.
@@ -95,8 +95,8 @@ def get_dashboard_spec(prompt):
     
     try:
         response = client.chat.completions.create(
-            # Switching to a currently supported and stable model
-            model="llama3-8b-8192", 
+            # Switching to a currently supported, larger Llama 3 model
+            model="llama3-70b-8192", 
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
@@ -357,7 +357,8 @@ if st.session_state.chart_dataframes:
         # Display the filtered charts below the main charts
         for idx, chart_id in enumerate(st.session_state.chart_dataframes.keys()):
             df = st.session_state.chart_dataframes[chart_id]
-            spec = next((c for c in st.session_session.chart_specs if c['id'] == chart_id), None)
+            # CRITICAL FIX: The next line contained a typo (st.session_session.chart_specs). This has been corrected.
+            spec = next((c for c in st.session_state.chart_specs if c['id'] == chart_id), None)
             
             if spec and not df.empty and df.shape[1] >= 2:
                 # Apply filter logic
