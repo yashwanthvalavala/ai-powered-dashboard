@@ -16,13 +16,13 @@ import os
 secrets = {
     "groq": {"api_key": "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"},
     "snowflake": {
-        user="yashwanth08",
-        password="Yashwanth_2005",
-        account="ap33012.ap-southeast-1",
-        warehouse="COMPUTE_WH",
-        database="fact_sales_db",
-        schema="public",
-        role="accountadmin"
+        user:"yashwanth08",
+        password:"Yashwanth_2005",
+        account:"ap33012.ap-southeast-1",
+        warehouse:"COMPUTE_WH",
+        database:"fact_sales_db",
+        schema:"public",
+        role:"accountadmin"
     }
 }
 
@@ -388,3 +388,4 @@ if st.session_state.chart_dataframes:
                                 key=f"plotly_event_{chart_id}_rerender",
                                 override_height=400
                             )
+
