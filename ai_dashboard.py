@@ -22,7 +22,7 @@ secrets = {
         "password": "Yashwanth_2005",
         "account": "ap33012.ap-southeast-1",
         "warehouse": "COMPUTE_WH",
-        "database": "fact_sales_db",
+        "database": "FACT_SALES_DB",
         "schema": "public",
         "role": "accountadmin"
     }
@@ -419,3 +419,4 @@ if st.session_state.chart_dataframes:
                             key=f"plotly_event_{chart_id}_rerender",
                             override_height=400
                         )
+
