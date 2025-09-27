@@ -1,0 +1,7 @@
+streamlit
+pandas
+snowflake-connector-python
+plotly
+groq
+weasyprint
+streamlit-plotly-events
