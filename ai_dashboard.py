@@ -188,7 +188,8 @@ if user_prompt:
         if spec and "charts" in spec:
             st.session_state.chart_specs = spec["charts"]
             st.session_state.chart_dataframes = {}
-            conn = get_snowflake_connection()
+            conn = get_snowflake_connection()  # ✅ use cached connection
+
             st.markdown("---")
             st.markdown("#### Generated Charts")
             chart_cols = st.columns(2)
@@ -219,6 +220,7 @@ if user_prompt:
                                 st.session_state.clicked_value = str(clicked_x)
                                 st.rerun()
 
-            conn.close()
+            # ❌ Do NOT close the connection; cached connection persists
         else:
             st.error("AI failed to generate a valid chart specification (JSON structure). Try a more specific query.")
+
