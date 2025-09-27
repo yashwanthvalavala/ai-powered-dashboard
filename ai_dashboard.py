@@ -9,6 +9,8 @@ import tempfile
 from weasyprint import HTML
 from streamlit_plotly_events import plotly_events
 import os
+import re
+from typing import Optional
 
 # --- Initialization and Secrets Setup ---
 # WARNING: HARDCODED PLACEHOLDER SECRETS FOR DEMO ONLY! 
@@ -57,6 +59,66 @@ except Exception as e:
     st.stop()
 
 
+# ---------------- Helper Functions ----------------
+def extract_table_identifiers(sql: str) -> list:
+    """
+    Extract table identifiers found after FROM or JOIN.
+    Returns list of raw identifiers as they appear in the SQL (may include schema qualifiers).
+    """
+    patterns = [
+        r"(?i)\bFROM\s+([A-Za-z0-9_\"\.]+)",
+        r"(?i)\bJOIN\s+([A-Za-z0-9_\"\.]+)"
+    ]
+    ids = []
+    for pat in patterns:
+        for m in re.finditer(pat, sql):
+            ids.append(m.group(1).strip().strip(';'))
+    return ids
+
+def find_best_sales_table(cur) -> Optional[str]:
+    """
+    Search INFORMATION_SCHEMA for table names containing 'sales' (case-insensitive).
+    Return the first fully-qualified match as: <DB>.<SCHEMA>.<TABLE>
+    """
+    try:
+        db = secrets["snowflake"]["database"]
+        schema = secrets["snowflake"]["schema"]
+        query = f"""
+            SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME
+            FROM {db}.INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = '{schema.upper()}'
+              AND TABLE_NAME ILIKE '%sales%'
+            ORDER BY TABLE_NAME
+            LIMIT 10
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        if not rows:
+            return None
+        # Prefer table names that start with FACT_SALES or contain FACT
+        rows_sorted = sorted(rows, key=lambda r: (0 if 'FACT' in r[2].upper() else 1, r[2]))
+        catalog, tbl_schema, table_name = rows_sorted[0]
+        fq = f"{catalog.upper()}.{tbl_schema.upper()}.{table_name.upper()}"
+        return fq
+    except Exception:
+        return None
+
+def replace_table_in_sql(sql: str, original_identifier: str, replacement_fq: str) -> str:
+    """
+    Replace the first occurrence of original_identifier with replacement_fq in a SQL string.
+    We use a case-insensitive boundary-aware replacement.
+    """
+    # Escape quotes in original identifier for regex
+    orig = original_identifier.strip().strip('"')
+    # Build a regex that finds the identifier after FROM or JOIN or as standalone
+    pattern = re.compile(r"(?i)\b" + re.escape(original_identifier) + r"\b")
+    new_sql, count = pattern.sub(replacement_fq, sql, count=1)
+    if count == 0:
+        # try replacing without quotes or with dot variations
+        pattern2 = re.compile(r"(?i)\b" + re.escape(orig) + r"\b")
+        new_sql = pattern2.sub(replacement_fq, sql, count=1)
+    return new_sql
+
 # ---------------- Dashboard Functions ----------------
 def get_dashboard_spec(prompt):
     """
@@ -89,7 +151,7 @@ def get_dashboard_spec(prompt):
     
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",   # ✅ updated to supported model
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
@@ -103,29 +165,63 @@ def get_dashboard_spec(prompt):
         return None
 
 def run_sql(cur, sql):
+    """
+    Execute SQL on Snowflake and handle missing table errors by attempting to resolve
+    an appropriate sales-related table and retrying.
+    Returns DataFrame (possibly empty).
+    """
     try:
         st.info(f"Executing SQL: `{sql}`")
         cur.execute(sql)
         df = pd.DataFrame(cur.fetchall(), columns=[c[0] for c in cur.description])
-        df.columns = [col.upper() for col in df.columns] 
+        df.columns = [col.upper() for col in df.columns]
         return df
     except Exception as e:
-        st.error(f"SQL Execution Error: {e}")
-        return pd.DataFrame()
+        err_text = str(e)
+        # If error indicates missing object / table, attempt to resolve and retry
+        if "does not exist" in err_text.lower() or "sql compilation error" in err_text.lower() or "002003" in err_text:
+            st.warning("Table referenced in SQL not found. Trying to auto-detect a sales table in the database and retry...")
+            # Extract candidate identifiers from SQL
+            ids = extract_table_identifiers(sql)
+            if not ids:
+                st.error("Could not detect table identifier in the SQL to replace.")
+                return pd.DataFrame()
+            # Ask Snowflake for best sales table
+            candidate = find_best_sales_table(cur)
+            if not candidate:
+                st.error("Auto-detection failed: No table matching '%sales%' found in the current database/schema.")
+                return pd.DataFrame()
+            # Replace the first identifier found with candidate and retry
+            original_id = ids[0]
+            new_sql = replace_table_in_sql(sql, original_id, candidate)
+            st.info(f"Retrying with detected table: {candidate}")
+            try:
+                st.info(f"Executing SQL: `{new_sql}`")
+                cur.execute(new_sql)
+                df = pd.DataFrame(cur.fetchall(), columns=[c[0] for c in cur.description])
+                df.columns = [col.upper() for col in df.columns]
+                return df
+            except Exception as e2:
+                st.error(f"Retry after table replacement failed: {e2}")
+                return pd.DataFrame()
+        else:
+            st.error(f"SQL Execution Error: {e}")
+            return pd.DataFrame()
 
 def safe_append_filter(sql_query, condition):
     query_lower = sql_query.lower()
     if "where" in query_lower:
         if "order by" in query_lower:
-            return sql_query.replace("ORDER BY", f" AND {condition} ORDER BY")
+            # replace only the first occurrence of ORDER BY (case-insensitive)
+            return re.sub(r"(?i)ORDER\s+BY", f" AND {condition} ORDER BY", sql_query, count=1)
         elif "limit" in query_lower:
-            return sql_query.replace("LIMIT", f" AND {condition} LIMIT")
+            return re.sub(r"(?i)LIMIT", f" AND {condition} LIMIT", sql_query, count=1)
         return sql_query + " AND " + condition
     else:
         if "order by" in query_lower:
-            return sql_query.replace("ORDER BY", f" WHERE {condition} ORDER BY")
+            return re.sub(r"(?i)ORDER\s+BY", f" WHERE {condition} ORDER BY", sql_query, count=1)
         elif "limit" in query_lower:
-            return sql_query.replace("LIMIT", f" WHERE {condition} LIMIT")
+            return re.sub(r"(?i)LIMIT", f" WHERE {condition} LIMIT", sql_query, count=1)
         else:
             return sql_query + " WHERE " + condition
 
