@@ -95,8 +95,8 @@ def get_dashboard_spec(prompt):
     
     try:
         response = client.chat.completions.create(
-            # Switched to the more stable llama3-8b model to avoid recurring 404 errors.
-            model="llama3-8b-8192", 
+            # Switched to the currently recommended Llama 3 70B model to resolve the decommissioning error.
+            model="llama3-70b-8192", 
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
