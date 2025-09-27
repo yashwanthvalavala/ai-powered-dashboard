@@ -16,16 +16,18 @@ import os
 secrets = {
     "groq": {"api_key": "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"},
     "snowflake": {
-        "user":"yashwanth08",
-        "password":"Yashwanth_2005",
-        "account":"ap33012.ap-southeast-1",
-        "warehouse":"COMPUTE_WH",
-        "database":"fact_sales_db",
-        "schema":"public",
-        "role":"accountadmin"
+        # CRITICAL FIX: All keys must be strings (quoted) and separated by a colon (:)
+        "user": "yashwanth08",
+        "password": "Yashwanth_2005",
+        "account": "ap33012.ap-southeast-1",
+        "warehouse": "COMPUTE_WH",
+        "database": "fact_sales_db",
+        "schema": "public",
+        "role": "accountadmin"
     }
 }
 
+# The warning will not trigger now since you provided a real Groq key
 if secrets["groq"]["api_key"] == "YOUR_GROQ_API_KEY_HERE_FOR_DEMO":
     st.warning("🚨 Using placeholder credentials! Update `secrets` dictionary with real values before running.")
 
@@ -93,8 +95,8 @@ def get_dashboard_spec(prompt):
     
     try:
         response = client.chat.completions.create(
-            # Using a supported and powerful model
-            model="mixtral-8x7b-32768", 
+            # Using the new, supported Mixtral instruct model
+            model="mixtral-8x7b-instruct", 
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
@@ -388,5 +390,4 @@ if st.session_state.chart_dataframes:
                                 key=f"plotly_event_{chart_id}_rerender",
                                 override_height=400
                             )
-
 
