@@ -95,8 +95,8 @@ def get_dashboard_spec(prompt):
     
     try:
         response = client.chat.completions.create(
-            # Switching to the commonly stable Mixtral 8x7b model with 4096 context window
-            model="mixtral-8x7b-instruct-4096", 
+            # Switched to the more stable llama3-8b model to avoid recurring 404 errors.
+            model="llama3-8b-8192", 
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
