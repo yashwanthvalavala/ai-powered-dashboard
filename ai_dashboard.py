@@ -32,7 +32,6 @@ st.subheader("Generate interactive data dashboards instantly using natural langu
 
 # ---------------- Snowflake Connection ----------------
 def get_snowflake_connection():
-    # Persist connection across reruns
     if "snowflake_conn" not in st.session_state:
         try:
             conn = snowflake.connector.connect(**secrets["snowflake"])
@@ -60,7 +59,7 @@ except Exception as e:
 def get_dashboard_spec(prompt):
     system_msg = f"""
     You are a world-class data analysis assistant specializing in generating concise, executable SQL queries for Snowflake.
-    The main sales table is FACT_SALES_DB.PUBLIC.FACT_SALES_DATABASE.
+    The main sales table is FACT_SALES_DB.PUBLIC.FACT_SALES.
     Return ONLY the JSON object in this format:
     {{
       "charts": [
@@ -68,13 +67,13 @@ def get_dashboard_spec(prompt):
           "id": "chart1", 
           "type": "bar", 
           "title": "Descriptive title", 
-          "sql": "SELECT column_x, SUM(column_y) FROM FACT_SALES_DB.PUBLIC.FACT_SALES_DATABASE GROUP BY column_x ORDER BY 2 DESC LIMIT 50000" 
+          "sql": "SELECT column_x, SUM(column_y) FROM FACT_SALES_DB.PUBLIC.FACT_SALES GROUP BY column_x ORDER BY 2 DESC LIMIT 50000" 
         }}
       ]
     }}
     Rules:
     1. Use only SELECT queries.
-    2. Fully qualified table name: FACT_SALES_DB.PUBLIC.FACT_SALES_DATABASE.
+    2. Fully qualified table name: FACT_SALES_DB.PUBLIC.FACT_SALES.
     3. Limit results using LIMIT 50000.
     """
     try:
@@ -189,7 +188,7 @@ if user_prompt:
         if spec and "charts" in spec:
             st.session_state.chart_specs = spec["charts"]
             st.session_state.chart_dataframes = {}
-            conn = get_snowflake_connection()  # ✅ use persistent session_state connection
+            conn = get_snowflake_connection()
 
             st.markdown("---")
             st.markdown("#### Generated Charts")
@@ -222,4 +221,3 @@ if user_prompt:
                                 st.rerun()
         else:
             st.error("AI failed to generate a valid chart specification (JSON structure). Try a more specific query.")
-
