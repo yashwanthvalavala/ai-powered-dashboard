@@ -7,7 +7,6 @@ import json
 from streamlit_plotly_events import plotly_events
 
 # --- Initialization and Secrets Setup ---
-# WARNING: Use st.secrets in production
 secrets = {
     "groq": {"api_key": "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"},
     "snowflake": {
@@ -23,8 +22,8 @@ secrets = {
 
 # --- Streamlit UI Configuration ---
 st.set_page_config(
-    page_title="AI-Powered Interactive Dashboard", 
-    layout="wide", 
+    page_title="AI-Powered Interactive Dashboard",
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 
@@ -32,21 +31,23 @@ st.markdown("<h1>🤖 AI Data Analyst</h1>", unsafe_allow_html=True)
 st.subheader("Generate interactive data dashboards instantly using natural language.")
 
 # ---------------- Snowflake Connection ----------------
-@st.cache_resource
 def get_snowflake_connection():
-    try:
-        conn = snowflake.connector.connect(**secrets["snowflake"])
-        # Set context
-        with conn.cursor() as cur:
-            cur.execute(f"USE WAREHOUSE {secrets['snowflake']['warehouse']}")
-            cur.execute(f"USE DATABASE {secrets['snowflake']['database']}")
-            cur.execute(f"USE SCHEMA {secrets['snowflake']['schema']}")
-            cur.execute(f"USE ROLE {secrets['snowflake']['role']}")
-        st.success(f"✅ Connected to Snowflake: {secrets['snowflake']['database']}.{secrets['snowflake']['schema']} ({secrets['snowflake']['role']})")
-        return conn
-    except Exception as e:
-        st.error(f"❌ Failed to connect to Snowflake. Error: {e}")
-        st.stop()
+    # Persist connection across reruns
+    if "snowflake_conn" not in st.session_state:
+        try:
+            conn = snowflake.connector.connect(**secrets["snowflake"])
+            # Set context
+            with conn.cursor() as cur:
+                cur.execute(f"USE WAREHOUSE {secrets['snowflake']['warehouse']}")
+                cur.execute(f"USE DATABASE {secrets['snowflake']['database']}")
+                cur.execute(f"USE SCHEMA {secrets['snowflake']['schema']}")
+                cur.execute(f"USE ROLE {secrets['snowflake']['role']}")
+            st.session_state.snowflake_conn = conn
+            st.success(f"✅ Connected to Snowflake: {secrets['snowflake']['database']}.{secrets['snowflake']['schema']}")
+        except Exception as e:
+            st.error(f"❌ Failed to connect to Snowflake. Error: {e}")
+            st.stop()
+    return st.session_state.snowflake_conn
 
 # ---------------- Groq API Setup ----------------
 try:
@@ -188,7 +189,7 @@ if user_prompt:
         if spec and "charts" in spec:
             st.session_state.chart_specs = spec["charts"]
             st.session_state.chart_dataframes = {}
-            conn = get_snowflake_connection()  # ✅ use cached connection
+            conn = get_snowflake_connection()  # ✅ use persistent session_state connection
 
             st.markdown("---")
             st.markdown("#### Generated Charts")
@@ -219,8 +220,6 @@ if user_prompt:
                             if clicked_x is not None:
                                 st.session_state.clicked_value = str(clicked_x)
                                 st.rerun()
-
-            # ❌ Do NOT close the connection; cached connection persists
         else:
             st.error("AI failed to generate a valid chart specification (JSON structure). Try a more specific query.")
 
