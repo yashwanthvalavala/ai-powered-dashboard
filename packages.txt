@@ -1,0 +1,4 @@
+pango
+cairo
+gdk-pixbuf2.0
+libffi-dev
