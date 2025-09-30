@@ -8,11 +8,11 @@ from streamlit_plotly_events import plotly_events
 
 # --- Initialization and Secrets Setup ---
 secrets = {
-    "groq": {"api_key": "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"},
+    "groq": {"api_key": "gsk_juEeRPwBNz0ta............................................"},
     "snowflake": {
-        "user": "yashwanth08",
-        "password": "Yashwanth_2005",
-        "account": "ap33012.ap-southeast-1",
+        "user": "xxxxxxxxxxxx",
+        "password": "xxxxxxxxx",
+        "account": "xxxxxxxxxxxxxxxxx",
         "warehouse": "COMPUTE_WH",
         "database": "FACT_SALES_DB",
         "schema": "PUBLIC",
@@ -221,3 +221,4 @@ if user_prompt:
                                 st.rerun()
         else:
             st.error("AI failed to generate a valid chart specification (JSON structure). Try a more specific query.")
+
